@@ -4,17 +4,39 @@ import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { GREETING_PATTERNS, MESSAGES, SERVICES } from '../constants/salon.js';
 
-const generateTimeSlots = () => {
-  const slots = [];
-  for (let h = 9; h < 21; h++) {
+const generateTimeSlotSections = (startHour = 9) => {
+  const sections = [];
+  const slotsPerSection = 10;
+  let currentSlots = [];
+  
+  for (let h = startHour; h < 21; h++) {
     const hour = h < 12 ? `${h}` : `${h-12}`;
     const ampm = h < 12 ? 'AM' : 'PM';
-    slots.push(
-      { id: `slot_${h}_00`, title: `${hour}:00 ${ampm} - ${hour}:30 ${ampm}` },
-      { id: `slot_${h}_30`, title: `${hour}:30 ${ampm} - ${h === 20 ? '9' : `${hour+1}`}:00 ${ampm}` }
-    );
+    
+    const slots = [
+      { id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: `30 minute slot` },
+      { id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: `30 minute slot` }
+    ];
+    
+    currentSlots.push(...slots);
+    
+    if (currentSlots.length >= slotsPerSection) {
+      sections.push({
+        title: `${sections.length * slotsPerSection + 1}-${(sections.length + 1) * slotsPerSection}`,
+        rows: currentSlots.slice(0, slotsPerSection)
+      });
+      currentSlots = currentSlots.slice(slotsPerSection);
+    }
   }
-  return slots;
+  
+  if (currentSlots.length > 0) {
+    sections.push({
+      title: `${sections.length * slotsPerSection + 1}-${sections.length * slotsPerSection + currentSlots.length}`,
+      rows: currentSlots
+    });
+  }
+  
+  return sections;
 };
 
 const generateDateOptions = () => {
@@ -22,21 +44,27 @@ const generateDateOptions = () => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const today = new Date();
 
+  // Generate next 7 days only
   for (let i = 0; i < 7; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
     const dayName = days[date.getDay()];
     const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const id = `date_${date.toISOString().split('T')[0]}`;
     
-    if (i === 0) {
-      dates.push({ id: `date_today`, title: `Today (${dateStr})` });
-    } else if (i === 1) {
-      dates.push({ id: `date_tomorrow`, title: `Tomorrow (${dateStr})` });
-    } else {
-      dates.push({ id: `date_${date.toISOString().split('T')[0]}`, title: `${dayName} (${dateStr})` });
-    }
+    dates.push({
+      id,
+      title: i === 0 ? `Today (${dateStr})` : 
+             i === 1 ? `Tomorrow (${dateStr})` :
+             `${dayName} (${dateStr})`,
+      description: `Select for available time slots`
+    });
   }
-  return dates;
+
+  return [{
+    title: "Available Dates",
+    rows: dates
+  }];
 };
 
 export const handleIncomingMessage = async (req, res, next) => {
@@ -124,55 +152,72 @@ export const handleIncomingMessage = async (req, res, next) => {
                 selectedService: selectedService
               });
 
-              const dateButtons = [
-                { type: 'reply', reply: { id: 'date_today', title: 'Today' } },
-                { type: 'reply', reply: { id: 'date_tomorrow', title: 'Tomorrow' } },
-                { type: 'reply', reply: { id: 'date_other', title: 'Pick Another Day' } }
-              ];
+              await whatsappService.sendListMessage(
+                phoneNumberId,
+                from,
+                'Select Date',
+                MESSAGES.CHOOSE_DATE,
+                generateDateOptions(),
+                message.id
+              );
+            }
+          } else if (session.step === 'selecting_date' && responseId.startsWith('date_')) {
+            const selectedDate = new Date(responseId.replace('date_', ''));
+            sessionService.updateSession(from, {
+              step: 'selecting_time',
+              selectedDate: selectedDate
+            });
 
+            const timeSlots = generateTimeSlotSections();
+            await whatsappService.sendListMessage(
+              phoneNumberId,
+              from,
+              'Select Time',
+              MESSAGES.CHOOSE_TIME,
+              timeSlots.slice(0, 1), // Send first section initially
+              message.id
+            );
+
+            // If there are more time slots, send a button to view more
+            if (timeSlots.length > 1) {
               await whatsappService.sendButtonMessage(
                 phoneNumberId,
                 from,
-                MESSAGES.CHOOSE_DATE,
-                dateButtons,
-                message.id
+                'Would you like to see more time slots?',
+                [{ type: 'reply', reply: { id: 'more_times', title: 'Show More Times' }}]
               );
             }
-          } else if (session.step === 'selecting_date') {
-            if (responseId === 'date_other') {
-              const dates = generateDateOptions().slice(2); // Exclude today and tomorrow
-              await whatsappService.sendListMessage(
-                phoneNumberId,
-                from,
-                'Available Dates',
-                'Choose your preferred date:',
-                [{ title: 'Next 5 Days', rows: dates }],
-                message.id
-              );
-            } else {
-              const selectedDate = responseId === 'date_today' 
-                ? new Date() 
-                : responseId === 'date_tomorrow'
-                  ? new Date(Date.now() + 86400000)
-                  : new Date(responseId.replace('date_', ''));
+          } else if (responseId === 'more_times' && session.step === 'selecting_time') {
+            const timeSlots = generateTimeSlotSections();
+            const currentSection = session.timeSection || 0;
+            const nextSection = currentSection + 1;
 
+            if (nextSection < timeSlots.length) {
               sessionService.updateSession(from, {
-                step: 'selecting_time',
-                selectedDate: selectedDate
+                ...session,
+                timeSection: nextSection
               });
 
-              const timeSlots = generateTimeSlots();
               await whatsappService.sendListMessage(
                 phoneNumberId,
                 from,
-                'Available Time Slots',
-                MESSAGES.CHOOSE_TIME,
-                [{ title: 'Available Slots', rows: timeSlots }],
+                'More Times',
+                'Select from additional available times:',
+                [timeSlots[nextSection]],
                 message.id
               );
+
+              if (nextSection + 1 < timeSlots.length) {
+                await whatsappService.sendButtonMessage(
+                  phoneNumberId,
+                  from,
+                  'Would you like to see more time slots?',
+                  [{ type: 'reply', reply: { id: 'more_times', title: 'Show More Times' }}]
+                );
+              }
             }
           } else if (session.step === 'selecting_time' && responseId.startsWith('slot_')) {
-            const timeSlots = generateTimeSlots();
+            const timeSlots = generateTimeSlotSections().flatMap(section => section.rows);
             const selectedSlot = timeSlots.find(slot => slot.id === responseId);
             
             if (selectedSlot) {
