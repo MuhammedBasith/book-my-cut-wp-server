@@ -7,6 +7,7 @@ class WhatsappService {
     try {
       const payload = {
         messaging_product: "whatsapp",
+        recipient_type: "individual",
         to,
         ...data
       };
@@ -22,6 +23,7 @@ class WhatsappService {
         url: `https://graph.facebook.com/${config.graphApiVersion}/${phoneNumberId}/messages`,
         headers: {
           Authorization: `Bearer ${config.graphApiToken}`,
+          'Content-Type': 'application/json'
         },
         data: payload
       });
@@ -33,7 +35,11 @@ class WhatsappService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to send WhatsApp message', error, { to, messageId });
+      logger.error('Failed to send WhatsApp message', error, { 
+        to, 
+        messageId,
+        response: error.response?.data 
+      });
       throw error;
     }
   }
@@ -60,7 +66,10 @@ class WhatsappService {
         type: "list",
         header: { type: "text", text: header },
         body: { text: body },
-        action: { sections }
+        action: {
+          button: "Select an option",
+          sections: sections
+        }
       }
     }, messageId);
   }
@@ -74,6 +83,7 @@ class WhatsappService {
         url: `https://graph.facebook.com/${config.graphApiVersion}/${phoneNumberId}/messages`,
         headers: {
           Authorization: `Bearer ${config.graphApiToken}`,
+          'Content-Type': 'application/json'
         },
         data: {
           messaging_product: "whatsapp",
@@ -85,7 +95,10 @@ class WhatsappService {
       logger.info('Message marked as read successfully', { messageId });
       return response;
     } catch (error) {
-      logger.error('Failed to mark message as read', error, { messageId });
+      logger.error('Failed to mark message as read', error, { 
+        messageId,
+        response: error.response?.data 
+      });
       throw error;
     }
   }

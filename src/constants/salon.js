@@ -1,19 +1,18 @@
 export const SERVICES = {
   HAIR: [
-    { id: 'haircut_men', title: 'Men\'s Haircut', description: 'Classic cut & style' },
-    { id: 'haircut_women', title: 'Women\'s Haircut', description: 'Cut, wash & blow dry' },
+    { id: 'haircut_men', title: 'Mens Haircut', description: 'Classic cut & style' },
+    { id: 'haircut_women', title: 'Womens Haircut', description: 'Cut, wash & blow dry' },
     { id: 'color_global', title: 'Global Color', description: 'Full head coloring' },
-    { id: 'highlights', title: 'Highlights', description: 'Partial or full highlights' },
-    { id: 'balayage', title: 'Balayage', description: 'Natural-looking highlights' }
+    { id: 'highlights', title: 'Highlights', description: 'Partial or full highlights' }
   ],
   SKIN: [
     { id: 'facial_basic', title: 'Basic Facial', description: 'Deep cleansing facial' },
     { id: 'facial_premium', title: 'Premium Facial', description: 'Anti-aging treatment' },
     { id: 'cleanup', title: 'Clean Up', description: 'Quick refresh treatment' }
   ],
-  MASSAGE: [
-    { id: 'massage_swedish', title: 'Swedish Massage', description: '60-min relaxation' },
-    { id: 'massage_deep', title: 'Deep Tissue', description: 'Therapeutic massage' }
+  NAILS: [
+    { id: 'manicure', title: 'Manicure', description: 'Classic nail care' },
+    { id: 'pedicure', title: 'Pedicure', description: 'Foot & nail treatment' }
   ]
 };
 

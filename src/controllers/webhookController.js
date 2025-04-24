@@ -72,14 +72,15 @@ export const handleIncomingMessage = async (req, res, next) => {
 
       switch (responseId) {
         case 'choose_service':
+          // Format sections according to WhatsApp API requirements
           const serviceSections = Object.entries(SERVICES).map(([category, services]) => ({
             title: category,
             rows: services.map(service => ({
               id: service.id,
-              title: service.title,
-              description: service.description
+              title: service.title.substring(0, 24), // Max 24 chars
+              description: service.description.substring(0, 72) // Max 72 chars
             }))
-          }));
+          })).slice(0, 10); // Max 10 sections
 
           await whatsappService.sendListMessage(
             phoneNumberId,
@@ -226,7 +227,9 @@ export const handleIncomingMessage = async (req, res, next) => {
     await whatsappService.markMessageAsRead(phoneNumberId, message.id);
     res.sendStatus(200);
   } catch (error) {
-    logger.error('Error handling incoming message', error);
+    logger.error('Error handling incoming message', error, { 
+      payload: error.response?.data 
+    });
     next(error);
   }
 };
