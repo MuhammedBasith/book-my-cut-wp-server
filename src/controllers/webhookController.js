@@ -4,39 +4,42 @@ import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { GREETING_PATTERNS, MESSAGES, SERVICES } from '../constants/salon.js';
 
-const generateTimeSlotSections = (startHour = 9) => {
-  const sections = [];
-  const slotsPerSection = 10;
-  let currentSlots = [];
-  
-  for (let h = startHour; h < 21; h++) {
+const TIME_RANGES = {
+  morning: { start: 9, end: 12, label: 'Morning (9 AM - 12 PM)' },
+  afternoon: { start: 12, end: 16, label: 'Afternoon (12 PM - 4 PM)' },
+  evening: { start: 16, end: 21, label: 'Evening (4 PM - 9 PM)' }
+};
+
+const generateTimeRangeOptions = () => {
+  return [{
+    title: "Available Time Slots",
+    rows: Object.entries(TIME_RANGES).map(([id, range]) => ({
+      id: `range_${id}`,
+      title: range.label,
+      description: 'Select to see available slots'
+    }))
+  }];
+};
+
+const generateTimeSlotsForRange = (rangeId) => {
+  const range = TIME_RANGES[rangeId.replace('range_', '')];
+  if (!range) return [];
+
+  const slots = [];
+  for (let h = range.start; h < range.end; h++) {
     const hour = h < 12 ? `${h}` : `${h-12}`;
     const ampm = h < 12 ? 'AM' : 'PM';
     
-    const slots = [
-      { id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: `30 minute slot` },
-      { id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: `30 minute slot` }
-    ];
-    
-    currentSlots.push(...slots);
-    
-    if (currentSlots.length >= slotsPerSection) {
-      sections.push({
-        title: `${sections.length * slotsPerSection + 1}-${(sections.length + 1) * slotsPerSection}`,
-        rows: currentSlots.slice(0, slotsPerSection)
-      });
-      currentSlots = currentSlots.slice(slotsPerSection);
-    }
+    slots.push(
+      { id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: '30 minute slot' },
+      { id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' }
+    );
   }
-  
-  if (currentSlots.length > 0) {
-    sections.push({
-      title: `${sections.length * slotsPerSection + 1}-${sections.length * slotsPerSection + currentSlots.length}`,
-      rows: currentSlots
-    });
-  }
-  
-  return sections;
+
+  return [{
+    title: range.label,
+    rows: slots
+  }];
 };
 
 const generateDateOptions = () => {
@@ -164,60 +167,35 @@ export const handleIncomingMessage = async (req, res, next) => {
           } else if (session.step === 'selecting_date' && responseId.startsWith('date_')) {
             const selectedDate = new Date(responseId.replace('date_', ''));
             sessionService.updateSession(from, {
-              step: 'selecting_time',
+              step: 'selecting_time_range',
               selectedDate: selectedDate
             });
 
-            const timeSlots = generateTimeSlotSections();
             await whatsappService.sendListMessage(
               phoneNumberId,
               from,
               'Select Time',
-              MESSAGES.CHOOSE_TIME,
-              timeSlots.slice(0, 1), // Send first section initially
+              'Choose a time range that works best for you:',
+              generateTimeRangeOptions(),
               message.id
             );
+          } else if (session.step === 'selecting_time_range' && responseId.startsWith('range_')) {
+            sessionService.updateSession(from, {
+              step: 'selecting_time',
+              selectedTimeRange: responseId
+            });
 
-            // If there are more time slots, send a button to view more
-            if (timeSlots.length > 1) {
-              await whatsappService.sendButtonMessage(
-                phoneNumberId,
-                from,
-                'Would you like to see more time slots?',
-                [{ type: 'reply', reply: { id: 'more_times', title: 'Show More Times' }}]
-              );
-            }
-          } else if (responseId === 'more_times' && session.step === 'selecting_time') {
-            const timeSlots = generateTimeSlotSections();
-            const currentSection = session.timeSection || 0;
-            const nextSection = currentSection + 1;
-
-            if (nextSection < timeSlots.length) {
-              sessionService.updateSession(from, {
-                ...session,
-                timeSection: nextSection
-              });
-
-              await whatsappService.sendListMessage(
-                phoneNumberId,
-                from,
-                'More Times',
-                'Select from additional available times:',
-                [timeSlots[nextSection]],
-                message.id
-              );
-
-              if (nextSection + 1 < timeSlots.length) {
-                await whatsappService.sendButtonMessage(
-                  phoneNumberId,
-                  from,
-                  'Would you like to see more time slots?',
-                  [{ type: 'reply', reply: { id: 'more_times', title: 'Show More Times' }}]
-                );
-              }
-            }
+            await whatsappService.sendListMessage(
+              phoneNumberId,
+              from,
+              'Select Time',
+              'Choose your preferred appointment time:',
+              generateTimeSlotsForRange(responseId),
+              message.id
+            );
           } else if (session.step === 'selecting_time' && responseId.startsWith('slot_')) {
-            const timeSlots = generateTimeSlotSections().flatMap(section => section.rows);
+            const timeSlots = generateTimeSlotsForRange(session.selectedTimeRange)
+              .flatMap(section => section.rows);
             const selectedSlot = timeSlots.find(slot => slot.id === responseId);
             
             if (selectedSlot) {
