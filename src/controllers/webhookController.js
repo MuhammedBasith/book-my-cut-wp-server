@@ -227,8 +227,9 @@ export const handleIncomingMessage = async (req, res, next) => {
     // Handle text messages
     else if (message.type === 'text') {
       const text = message.text.body.toLowerCase().trim();
+      const isGreeting = GREETING_PATTERNS.some(pattern => pattern.test(text));
       
-      if (GREETING_PATTERNS.includes(text)) {
+      if (isGreeting) {
         session = sessionService.createSession(from, userName);
         
         const buttons = [

@@ -17,13 +17,15 @@ export const SERVICES = {
 };
 
 export const GREETING_PATTERNS = [
-  'hi',
-  'hey',
-  'hello',
-  'menu',
-  'start',
-  'help'
+  /^hi+$/i,
+  /^hai+$/i,
+  /^hey+$/i,
+  /^hello+$/i,
+  /^menu$/i,
+  /^start$/i,
+  /^help$/i
 ];
+
 
 export const MESSAGES = {
   WELCOME: (name) => `Hi ${name}, welcome to GlamStudio! What would you like to do today?`,
