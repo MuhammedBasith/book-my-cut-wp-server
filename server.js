@@ -5,6 +5,7 @@ import { config } from "./src/config/env.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 import { requestLogger } from "./src/middleware/requestLogger.js";
 import { logger } from "./src/utils/logger.js";
+import { databaseService } from "./src/services/databaseService.js";
 
 const app = express();
 
@@ -31,6 +32,17 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-app.listen(config.port, () => {
-  logger.info(`Server is listening on port: ${config.port}`);
-});
+// Initialize MongoDB connection and start server
+const startServer = async () => {
+  try {
+    await databaseService.connect();
+    app.listen(config.port, () => {
+      logger.info(`Server is listening on port: ${config.port}`);
+    });
+  } catch (error) {
+    logger.error('Failed to start server', error);
+    process.exit(1);
+  }
+};
+
+startServer();
