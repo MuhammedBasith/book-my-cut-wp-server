@@ -1,6 +1,10 @@
 import { MongoClient } from 'mongodb';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { Service } from '../models/Service.js';
+import { Customer } from '../models/Customer.js';
+import { Booking } from '../models/Booking.js';
+import { Session } from '../models/Session.js';
 
 class DatabaseService {
   constructor() {
@@ -18,9 +22,27 @@ class DatabaseService {
       this.db = this.client.db(config.mongodb.dbName);
       logger.info('Successfully connected to MongoDB');
       
+      // Initialize collections and create indexes
+      await this.initializeCollections();
+      
       return this.db;
     } catch (error) {
       logger.error('Failed to connect to MongoDB', error);
+      throw error;
+    }
+  }
+
+  async initializeCollections() {
+    try {
+      // Create indexes for all collections
+      await Service.createIndexes(this.db);
+      await Customer.createIndexes(this.db);
+      await Booking.createIndexes(this.db);
+      await Session.createIndexes(this.db);
+      
+      logger.info('Successfully initialized collections and created indexes');
+    } catch (error) {
+      logger.error('Failed to initialize collections', error);
       throw error;
     }
   }
