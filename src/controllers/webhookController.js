@@ -90,7 +90,7 @@ export const handleIncomingMessage = async (req, res, next) => {
 
     const from = message.from;
     const userName = contact?.profile?.name || 'there';
-    let session = sessionService.getSession(from);
+    let session = await sessionService.getSession(from);
 
     // Handle interactive messages (button/list responses)
     if (message.type === 'interactive') {
@@ -98,7 +98,7 @@ export const handleIncomingMessage = async (req, res, next) => {
       const responseId = response.button_reply?.id || response.list_reply?.id;
 
       if (!session) {
-        session = sessionService.createSession(from, userName);
+        session = await sessionService.createSession(from, userName);
       }
 
       switch (responseId) {
@@ -108,10 +108,10 @@ export const handleIncomingMessage = async (req, res, next) => {
             title: category,
             rows: services.map(service => ({
               id: service.id,
-              title: service.title.substring(0, 24), // Max 24 chars
-              description: service.description.substring(0, 72) // Max 72 chars
+              title: service.title.substring(0, 24),
+              description: service.description.substring(0, 72)
             }))
-          })).slice(0, 10); // Max 10 sections
+          })).slice(0, 10);
 
           await whatsappService.sendListMessage(
             phoneNumberId,
@@ -121,11 +121,10 @@ export const handleIncomingMessage = async (req, res, next) => {
             serviceSections,
             message.id
           );
-          sessionService.updateSession(from, { step: 'selecting_service' });
+          await sessionService.updateSession(from, { step: 'selecting_service' });
           break;
 
         case 'my_reservations':
-          // Placeholder for future implementation
           await whatsappService.sendTextMessage(
             phoneNumberId,
             from,
@@ -150,7 +149,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               .find(service => service.id === responseId);
 
             if (selectedService) {
-              sessionService.updateSession(from, { 
+              await sessionService.updateSession(from, { 
                 step: 'selecting_date',
                 selectedService: selectedService
               });
@@ -166,7 +165,7 @@ export const handleIncomingMessage = async (req, res, next) => {
             }
           } else if (session.step === 'selecting_date' && responseId.startsWith('date_')) {
             const selectedDate = new Date(responseId.replace('date_', ''));
-            sessionService.updateSession(from, {
+            await sessionService.updateSession(from, {
               step: 'selecting_time_range',
               selectedDate: selectedDate
             });
@@ -180,7 +179,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               message.id
             );
           } else if (session.step === 'selecting_time_range' && responseId.startsWith('range_')) {
-            sessionService.updateSession(from, {
+            await sessionService.updateSession(from, {
               step: 'selecting_time',
               selectedTimeRange: responseId
             });
@@ -219,7 +218,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               );
 
               // Clear session after successful booking
-              sessionService.clearSession(from);
+              await sessionService.clearSession(from);
             }
           }
       }
@@ -230,7 +229,7 @@ export const handleIncomingMessage = async (req, res, next) => {
       const isGreeting = GREETING_PATTERNS.some(pattern => pattern.test(text));
       
       if (isGreeting) {
-        session = sessionService.createSession(from, userName);
+        session = await sessionService.createSession(from, userName);
         
         const buttons = [
           { type: 'reply', reply: { id: 'choose_service', title: '💇 Choose a Service' } },
