@@ -5,10 +5,12 @@ export class Booking {
     _id = new ObjectId(),
     customerId,
     serviceId,
-    status = 'CONFIRMED',
+    status = 'CONFIRMED', // CONFIRMED, CANCELLED, COMPLETED, PAID
+    paymentStatus = 'PENDING', // PENDING, PAID
     appointmentDate,
     appointmentTime,
     bookingReference = generateBookingReference(),
+    loyaltyPointsAwarded = false,
     createdAt = new Date(),
     updatedAt = new Date()
   }) {
@@ -16,9 +18,11 @@ export class Booking {
     this.customerId = customerId;
     this.serviceId = serviceId;
     this.status = status;
+    this.paymentStatus = paymentStatus;
     this.appointmentDate = appointmentDate;
     this.appointmentTime = appointmentTime;
     this.bookingReference = bookingReference;
+    this.loyaltyPointsAwarded = loyaltyPointsAwarded;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
@@ -33,6 +37,7 @@ export class Booking {
     await collection.createIndex({ serviceId: 1 });
     await collection.createIndex({ appointmentDate: 1 });
     await collection.createIndex({ status: 1 });
+    await collection.createIndex({ paymentStatus: 1 });
     await collection.createIndex({ bookingReference: 1 }, { unique: true });
   }
 }

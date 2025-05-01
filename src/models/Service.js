@@ -9,6 +9,7 @@ export class Service {
     description,
     duration,
     price,
+    loyaltyPoints = 0,
     isActive = true,
     createdAt = new Date(),
     updatedAt = new Date()
@@ -20,6 +21,7 @@ export class Service {
     this.description = description;
     this.duration = duration;
     this.price = price;
+    this.loyaltyPoints = loyaltyPoints;
     this.isActive = isActive;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;

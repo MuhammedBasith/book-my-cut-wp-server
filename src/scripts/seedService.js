@@ -12,6 +12,7 @@ const services = [
     description: 'Professional haircut for men',
     duration: 30,
     price: 300,
+    loyaltyPoints: 30,
     isActive: true
   },
   {
@@ -21,6 +22,7 @@ const services = [
     description: 'Professional haircut for women',
     duration: 45,
     price: 500,
+    loyaltyPoints: 50,
     isActive: true
   },
   {
@@ -30,6 +32,7 @@ const services = [
     description: 'Professional hair coloring service',
     duration: 90,
     price: 1500,
+    loyaltyPoints: 150,
     isActive: true
   },
   {
@@ -39,6 +42,7 @@ const services = [
     description: 'Relaxing facial treatment',
     duration: 60,
     price: 800,
+    loyaltyPoints: 80,
     isActive: true
   },
   {
@@ -48,6 +52,7 @@ const services = [
     description: 'Professional nail care for hands',
     duration: 45,
     price: 400,
+    loyaltyPoints: 40,
     isActive: true
   }
 ];
