@@ -14,6 +14,40 @@ const TIME_RANGES = {
   evening: { start: 16, end: 21, label: 'Evening (4 PM - 9 PM)' }
 };
 
+const SLOT_DURATION = 30; // Duration in minutes
+
+const checkAvailableSlots = async (selectedDate, serviceId) => {
+  const db = databaseService.getDb();
+  
+  // Get start and end of selected date
+  const startOfDay = new Date(selectedDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(selectedDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  // Get all bookings for the selected date
+  const existingBookings = await Booking.getCollection(db)
+    .find({
+      appointmentDate: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
+      status: { $nin: ['CANCELLED'] } // Exclude cancelled bookings
+    })
+    .toArray();
+
+  // Create a map of booked time slots
+  const bookedSlots = new Map();
+  existingBookings.forEach(booking => {
+    const [hour, minute] = booking.appointmentTime.split(':')[0].split('_');
+    const timeKey = `${parseInt(hour)}_${minute || '00'}`;
+    bookedSlots.set(timeKey, true);
+  });
+
+  return bookedSlots;
+};
+
 const generateTimeRangeOptions = (selectedDate) => {
   const now = new Date();
   const isToday = selectedDate && 
@@ -36,7 +70,7 @@ const generateTimeRangeOptions = (selectedDate) => {
   }];
 };
 
-const generateTimeSlotsForRange = (rangeId, selectedDate) => {
+const generateTimeSlotsForRange = async (rangeId, selectedDate) => {
   const range = TIME_RANGES[rangeId.replace('range_', '')];
   if (!range) return [];
 
@@ -49,6 +83,9 @@ const generateTimeSlotsForRange = (rangeId, selectedDate) => {
   // Convert current time to IST (UTC+5:30)
   const currentHourIST = isToday ? (now.getUTCHours() + 5 + (now.getUTCMinutes() + 30) / 60) : 0;
   
+  // Get booked slots for the day
+  const bookedSlots = await checkAvailableSlots(selectedDate);
+  
   const slots = [];
   for (let h = range.start; h < range.end; h++) {
     // Skip past time slots for today
@@ -60,16 +97,19 @@ const generateTimeSlotsForRange = (rangeId, selectedDate) => {
     // For current hour, only show future 30-minute slot if applicable
     if (isToday && h === Math.ceil(currentHourIST)) {
       const currentMinutesIST = (now.getUTCMinutes() + 30) % 60;
-      if (currentMinutesIST < 30) {
+      if (currentMinutesIST < 30 && !bookedSlots.has(`${h}_30`)) {
         slots.push({ id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' });
       }
       continue;
     }
 
-    slots.push(
-      { id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: '30 minute slot' },
-      { id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' }
-    );
+    // Add available slots that aren't booked
+    if (!bookedSlots.has(`${h}_00`)) {
+      slots.push({ id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: '30 minute slot' });
+    }
+    if (!bookedSlots.has(`${h}_30`)) {
+      slots.push({ id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' });
+    }
   }
 
   return slots.length > 0 ? [{
@@ -308,7 +348,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               selectedTimeRange: responseId
             });
 
-            const timeSlots = generateTimeSlotsForRange(responseId, session.selectedDate);
+            const timeSlots = await generateTimeSlotsForRange(responseId, session.selectedDate);
             
             if (timeSlots.length === 0) {
               await whatsappService.sendTextMessage(
@@ -329,11 +369,25 @@ export const handleIncomingMessage = async (req, res, next) => {
               message.id
             );
           } else if (session.step === 'selecting_time' && responseId.startsWith('slot_')) {
-            const timeSlots = generateTimeSlotsForRange(session.selectedTimeRange, session.selectedDate)
-              .flatMap(section => section.rows);
-            const selectedSlot = timeSlots.find(slot => slot.id === responseId);
-            
+            const timeSlots = await generateTimeSlotsForRange(session.selectedTimeRange, session.selectedDate);
+            const availableSlots = timeSlots.flatMap(section => section.rows);
+            const selectedSlot = availableSlots.find(slot => slot.id === responseId);
+
             if (selectedSlot) {
+              // Double-check that the slot is still available
+              const [hour, minute] = responseId.split('_').slice(1);
+              const bookedSlots = await checkAvailableSlots(session.selectedDate);
+              
+              if (bookedSlots.has(`${hour}_${minute}`)) {
+                await whatsappService.sendTextMessage(
+                  phoneNumberId,
+                  from,
+                  'Sorry, this time slot was just booked by someone else. Please select a different time.',
+                  message.id
+                );
+                return;
+              }
+
               const { selectedService, selectedDate } = session;
               const dateStr = selectedDate.toLocaleDateString('en-US', { 
                 weekday: 'long',
