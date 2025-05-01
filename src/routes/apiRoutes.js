@@ -96,6 +96,107 @@ router.get('/salon/:salonId/bookings/today', async (req, res) => {
   }
 });
 
+// Get customer's booking history
+router.get('/customers/:customerId/bookings', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const db = databaseService.getDb();
+    
+    const bookings = await Booking.getCollection(db)
+      .aggregate([
+        {
+          $match: { 
+            customerId: new ObjectId(customerId)
+          }
+        },
+        {
+          $lookup: {
+            from: 'services',
+            localField: 'serviceId',
+            foreignField: '_id',
+            as: 'service'
+          }
+        },
+        {
+          $unwind: '$service'
+        },
+        {
+          $sort: { appointmentDate: -1 }
+        }
+      ])
+      .toArray();
+
+    res.json(bookings);
+  } catch (error) {
+    logger.error('Failed to fetch customer bookings', error);
+    res.status(500).json({ error: 'Failed to fetch customer bookings' });
+  }
+});
+
+// Get customer's loyalty points with detailed history
+router.get('/customers/:customerId/loyalty', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const db = databaseService.getDb();
+    
+    // Get customer details
+    const customer = await Customer.getCollection(db).findOne({ 
+      _id: new ObjectId(customerId) 
+    });
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    // Get points history from completed and paid bookings
+    const pointsHistory = await Booking.getCollection(db)
+      .aggregate([
+        {
+          $match: {
+            customerId: new ObjectId(customerId),
+            paymentStatus: 'PAID',
+            loyaltyPointsAwarded: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'services',
+            localField: 'serviceId',
+            foreignField: '_id',
+            as: 'service'
+          }
+        },
+        {
+          $unwind: '$service'
+        },
+        {
+          $sort: { appointmentDate: -1 }
+        },
+        {
+          $project: {
+            date: '$appointmentDate',
+            serviceName: '$service.title',
+            pointsEarned: '$service.loyaltyPoints',
+            bookingReference: 1
+          }
+        }
+      ])
+      .toArray();
+
+    res.json({
+      customerId: customer._id,
+      name: customer.name,
+      phoneNumber: customer.phoneNumber,
+      currentPoints: customer.loyaltyPoints,
+      lastUpdated: customer.updatedAt,
+      pointsHistory
+    });
+  } catch (error) {
+    logger.error('Failed to fetch customer loyalty details', error);
+    res.status(500).json({ error: 'Failed to fetch customer loyalty details' });
+  }
+});
+
 // Update booking status and handle loyalty points
 router.patch('/bookings/:bookingId/status', async (req, res) => {
   try {

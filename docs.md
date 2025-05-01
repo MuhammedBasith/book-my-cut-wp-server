@@ -1,4 +1,3 @@
-
 # updates
 
 1. **fixed the session mess**
@@ -267,6 +266,64 @@ list all customers with their points and visit history
 ]
 ```
 
+### get customer booking history
+
+```
+GET /api/v1/customers/:customerId/bookings
+```
+
+Get a specific customer's booking history with service details
+
+#### sample response:
+
+```json
+[
+  {
+    "_id": "507f1f77bcf86cd799439011",
+    "status": "COMPLETED",
+    "paymentStatus": "PAID",
+    "appointmentDate": "2025-05-01T10:30:00.000Z",
+    "appointmentTime": "10:30 AM",
+    "bookingReference": "BMC-89ab3-XYZ12",
+    "service": {
+      "title": "Mens Haircut",
+      "description": "Professional haircut for men",
+      "price": 300,
+      "duration": 30
+    },
+    "loyaltyPointsAwarded": true
+  }
+]
+```
+
+### get customer loyalty details
+
+```
+GET /api/v1/customers/:customerId/loyalty
+```
+
+Get detailed view of a customer's loyalty points including earning history
+
+#### sample response:
+
+```json
+{
+  "customerId": "507f1f77bcf86cd799439012",
+  "name": "John Doe",
+  "phoneNumber": "919876543210",
+  "currentPoints": 100,
+  "lastUpdated": "2025-05-01T11:30:00.000Z",
+  "pointsHistory": [
+    {
+      "date": "2025-05-01T10:30:00.000Z",
+      "serviceName": "Mens Haircut",
+      "pointsEarned": 30,
+      "bookingReference": "BMC-89ab3-XYZ12"
+    }
+  ]
+}
+```
+
 ---
 
 ## error responses
@@ -382,3 +439,6 @@ all endpoints return error responses in this format:
         
 
 ---
+
+
+to make a service active or inactive(so there should be a check while sending the services to the user like if it is active or incative and send only active services)
