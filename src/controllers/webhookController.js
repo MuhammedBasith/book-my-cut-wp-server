@@ -13,36 +13,68 @@ const TIME_RANGES = {
   evening: { start: 16, end: 21, label: 'Evening (4 PM - 9 PM)' }
 };
 
-const generateTimeRangeOptions = () => {
+const generateTimeRangeOptions = (selectedDate) => {
+  const now = new Date();
+  const isToday = selectedDate && 
+    selectedDate.getDate() === now.getDate() &&
+    selectedDate.getMonth() === now.getMonth() &&
+    selectedDate.getFullYear() === now.getFullYear();
+
+  // Convert current time to IST (UTC+5:30)
+  const currentHourIST = isToday ? (now.getUTCHours() + 5 + (now.getUTCMinutes() + 30) / 60) : 0;
+
   return [{
     title: "Available Time Slots",
-    rows: Object.entries(TIME_RANGES).map(([id, range]) => ({
-      id: `range_${id}`,
-      title: range.label,
-      description: 'Select to see available slots'
-    }))
+    rows: Object.entries(TIME_RANGES)
+      .filter(([_, range]) => !isToday || range.end > currentHourIST)
+      .map(([id, range]) => ({
+        id: `range_${id}`,
+        title: range.label,
+        description: 'Select to see available slots'
+      }))
   }];
 };
 
-const generateTimeSlotsForRange = (rangeId) => {
+const generateTimeSlotsForRange = (rangeId, selectedDate) => {
   const range = TIME_RANGES[rangeId.replace('range_', '')];
   if (!range) return [];
 
+  const now = new Date();
+  const isToday = selectedDate && 
+    selectedDate.getDate() === now.getDate() &&
+    selectedDate.getMonth() === now.getMonth() &&
+    selectedDate.getFullYear() === now.getFullYear();
+
+  // Convert current time to IST (UTC+5:30)
+  const currentHourIST = isToday ? (now.getUTCHours() + 5 + (now.getUTCMinutes() + 30) / 60) : 0;
+  
   const slots = [];
   for (let h = range.start; h < range.end; h++) {
+    // Skip past time slots for today
+    if (isToday && h <= currentHourIST) continue;
+
     const hour = h < 12 ? `${h}` : `${h-12}`;
     const ampm = h < 12 ? 'AM' : 'PM';
     
+    // For current hour, only show future 30-minute slot if applicable
+    if (isToday && h === Math.ceil(currentHourIST)) {
+      const currentMinutesIST = (now.getUTCMinutes() + 30) % 60;
+      if (currentMinutesIST < 30) {
+        slots.push({ id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' });
+      }
+      continue;
+    }
+
     slots.push(
       { id: `slot_${h}_00`, title: `${hour}:00 ${ampm}`, description: '30 minute slot' },
       { id: `slot_${h}_30`, title: `${hour}:30 ${ampm}`, description: '30 minute slot' }
     );
   }
 
-  return [{
+  return slots.length > 0 ? [{
     title: range.label,
     rows: slots
-  }];
+  }] : [];
 };
 
 const generateDateOptions = () => {
@@ -157,10 +189,65 @@ export const handleIncomingMessage = async (req, res, next) => {
           break;
 
         case 'loyalty_points':
+          const customer = await customerCollection.findOne({ phoneNumber: from });
+          if (!customer) {
+            await whatsappService.sendTextMessage(
+              phoneNumberId,
+              from,
+              'No loyalty points found. Book a service to start earning points! 🎁',
+              message.id
+            );
+            break;
+          }
+
+          const recentBookings = await Booking.getCollection(db)
+            .aggregate([
+              {
+                $match: {
+                  customerId: customer._id,
+                  paymentStatus: 'PAID',
+                  loyaltyPointsAwarded: true
+                }
+              },
+              {
+                $lookup: {
+                  from: 'services',
+                  localField: 'serviceId',
+                  foreignField: 'serviceId',
+                  as: 'service'
+                }
+              },
+              {
+                $unwind: '$service'
+              },
+              {
+                $sort: { createdAt: -1 }
+              },
+              {
+                $limit: 5
+              }
+            ])
+            .toArray();
+
+          let message = `💫 Your Current Points: ${customer.loyaltyPoints}\n\n`;
+          
+          if (recentBookings.length > 0) {
+            message += '📝 Recent Points History:\n';
+            recentBookings.forEach(booking => {
+              const date = booking.appointmentDate.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric'
+              });
+              message += `${date} - ${booking.service.title}: +${booking.service.loyaltyPoints} points\n`;
+            });
+          }
+
+          message += '\n💡 Points are awarded after service completion and payment.';
+
           await whatsappService.sendTextMessage(
             phoneNumberId,
             from,
-            MESSAGES.LOYALTY_POINTS,
+            message,
             message.id
           );
           break;
@@ -198,7 +285,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               from,
               'Select Time',
               'Choose a time range that works best for you:',
-              generateTimeRangeOptions(),
+              generateTimeRangeOptions(selectedDate),
               message.id
             );
           } else if (session.step === 'selecting_time_range' && responseId.startsWith('range_')) {
@@ -207,16 +294,28 @@ export const handleIncomingMessage = async (req, res, next) => {
               selectedTimeRange: responseId
             });
 
+            const timeSlots = generateTimeSlotsForRange(responseId, session.selectedDate);
+            
+            if (timeSlots.length === 0) {
+              await whatsappService.sendTextMessage(
+                phoneNumberId,
+                from,
+                'Sorry, no available time slots in this range. Please select a different time range or date.',
+                message.id
+              );
+              return;
+            }
+
             await whatsappService.sendListMessage(
               phoneNumberId,
               from,
               'Select Time',
               'Choose your preferred appointment time:',
-              generateTimeSlotsForRange(responseId),
+              timeSlots,
               message.id
             );
           } else if (session.step === 'selecting_time' && responseId.startsWith('slot_')) {
-            const timeSlots = generateTimeSlotsForRange(session.selectedTimeRange)
+            const timeSlots = generateTimeSlotsForRange(session.selectedTimeRange, session.selectedDate)
               .flatMap(section => section.rows);
             const selectedSlot = timeSlots.find(slot => slot.id === responseId);
             
