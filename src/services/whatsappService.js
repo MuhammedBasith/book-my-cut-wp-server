@@ -2,6 +2,14 @@ import axios from 'axios';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
+class WhatsappServiceError extends Error {
+  constructor(message, code, statusCode = 500) {
+    super(message);
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
 class WhatsappService {
   async sendMessage(phoneNumberId, to, data, messageId = null) {
     try {
@@ -35,12 +43,59 @@ class WhatsappService {
 
       return response;
     } catch (error) {
+      // Handle Meta API specific errors
+      if (error.response?.data) {
+        const metaError = error.response.data.error;
+        
+        // Token expired or invalid
+        if (metaError.code === 190) {
+          throw new WhatsappServiceError(
+            'WhatsApp API token has expired. Please refresh the token.',
+            'TOKEN_EXPIRED',
+            401
+          );
+        }
+        
+        // Permission error
+        if (metaError.code === 200) {
+          throw new WhatsappServiceError(
+            'WhatsApp API access denied. Please check permissions.',
+            'ACCESS_DENIED',
+            403
+          );
+        }
+
+        // Rate limiting
+        if (metaError.code === 4) {
+          throw new WhatsappServiceError(
+            'Rate limit exceeded. Please try again later.',
+            'RATE_LIMIT',
+            429
+          );
+        }
+
+        // Template error
+        if (metaError.code === 131030) {
+          throw new WhatsappServiceError(
+            'Message template error. Please verify the template.',
+            'TEMPLATE_ERROR',
+            400
+          );
+        }
+      }
+
       logger.error('Failed to send WhatsApp message', error, { 
         to, 
         messageId,
-        response: error.response?.data 
+        response: error.response?.data,
+        code: error.response?.data?.error?.code
       });
-      throw error;
+
+      throw new WhatsappServiceError(
+        'Failed to send WhatsApp message',
+        'WHATSAPP_ERROR',
+        500
+      );
     }
   }
 
@@ -95,11 +150,38 @@ class WhatsappService {
       logger.info('Message marked as read successfully', { messageId });
       return response;
     } catch (error) {
+      // Handle Meta API specific errors same as sendMessage
+      if (error.response?.data) {
+        const metaError = error.response.data.error;
+        
+        if (metaError.code === 190) {
+          throw new WhatsappServiceError(
+            'WhatsApp API token has expired. Please refresh the token.',
+            'TOKEN_EXPIRED',
+            401
+          );
+        }
+        
+        if (metaError.code === 200) {
+          throw new WhatsappServiceError(
+            'WhatsApp API access denied. Please check permissions.',
+            'ACCESS_DENIED',
+            403
+          );
+        }
+      }
+
       logger.error('Failed to mark message as read', error, { 
         messageId,
-        response: error.response?.data 
+        response: error.response?.data,
+        code: error.response?.data?.error?.code
       });
-      throw error;
+
+      throw new WhatsappServiceError(
+        'Failed to mark message as read',
+        'WHATSAPP_ERROR',
+        500
+      );
     }
   }
 }
