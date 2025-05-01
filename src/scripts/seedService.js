@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { connectDatabase } from '../config/database.js';
+import { databaseService } from "../services/databaseService.js";
 import { Service } from '../models/Service.js';
 
 config();
@@ -59,14 +59,16 @@ const services = [
 
 const seedServices = async () => {
   try {
-    await connectDatabase();
-    
+    const db = await databaseService.connect(); // get the db instance
+
+    const collection = Service.getCollection(db);
+
     // Clear existing services
-    await Service.deleteMany({});
-    
+    await collection.deleteMany({});
+
     // Insert new services
-    await Service.insertMany(services);
-    
+    await collection.insertMany(services);
+
     console.log('Services seeded successfully!');
     process.exit(0);
   } catch (error) {

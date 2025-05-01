@@ -2,9 +2,10 @@ import { whatsappService } from '../services/whatsappService.js';
 import { sessionService } from '../services/sessionService.js';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import { GREETING_PATTERNS, MESSAGES, SERVICES } from '../constants/salon.js';
+import { GREETING_PATTERNS, MESSAGES } from '../constants/salon.js';
 import { Customer } from '../models/Customer.js';
 import { Booking } from '../models/Booking.js';
+import { Service } from '../models/Service.js';
 import { databaseService } from '../services/databaseService.js';
 
 const TIME_RANGES = {
@@ -158,11 +159,23 @@ export const handleIncomingMessage = async (req, res, next) => {
 
       switch (responseId) {
         case 'choose_service':
-          // Format sections according to WhatsApp API requirements
-          const serviceSections = Object.entries(SERVICES).map(([category, services]) => ({
+          // Get services from MongoDB
+          const servicesFromDb = await Service.getCollection(db).find({ isActive: true }).toArray();
+          
+          // Group services by category
+          const servicesByCategory = servicesFromDb.reduce((acc, service) => {
+            if (!acc[service.category]) {
+              acc[service.category] = [];
+            }
+            acc[service.category].push(service);
+            return acc;
+          }, {});
+
+          // Format sections for WhatsApp API
+          const serviceSections = Object.entries(servicesByCategory).map(([category, services]) => ({
             title: category,
             rows: services.map(service => ({
-              id: service.id,
+              id: service.serviceId,
               title: service.title.substring(0, 24),
               description: service.description.substring(0, 72)
             }))
@@ -229,34 +242,35 @@ export const handleIncomingMessage = async (req, res, next) => {
             ])
             .toArray();
 
-          let message = `💫 Your Current Points: ${customer.loyaltyPoints}\n\n`;
+          let pointsMessage = `💫 Your Current Points: ${customer.loyaltyPoints}\n\n`;
           
           if (recentBookings.length > 0) {
-            message += '📝 Recent Points History:\n';
+            pointsMessage += '📝 Recent Points History:\n';
             recentBookings.forEach(booking => {
               const date = booking.appointmentDate.toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric'
               });
-              message += `${date} - ${booking.service.title}: +${booking.service.loyaltyPoints} points\n`;
+              pointsMessage += `${date} - ${booking.service.title}: +${booking.service.loyaltyPoints} points\n`;
             });
           }
 
-          message += '\n💡 Points are awarded after service completion and payment.';
+          pointsMessage += '\n💡 Points are awarded after service completion and payment.';
 
           await whatsappService.sendTextMessage(
             phoneNumberId,
             from,
-            message,
+            pointsMessage,
             message.id
           );
           break;
 
         default:
           if (session.step === 'selecting_service' && responseId.includes('_')) {
-            const selectedService = Object.values(SERVICES)
-              .flat()
-              .find(service => service.id === responseId);
+            const selectedService = await Service.getCollection(db).findOne({ 
+              serviceId: responseId,
+              isActive: true
+            });
 
             if (selectedService) {
               await sessionService.updateSession(from, { 
