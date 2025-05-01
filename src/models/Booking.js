@@ -11,6 +11,7 @@ export class Booking {
     appointmentTime,
     bookingReference = generateBookingReference(),
     loyaltyPointsAwarded = false,
+    confirmationMessageId = null,
     createdAt = new Date(),
     updatedAt = new Date()
   }) {
@@ -23,6 +24,7 @@ export class Booking {
     this.appointmentTime = appointmentTime;
     this.bookingReference = bookingReference;
     this.loyaltyPointsAwarded = loyaltyPointsAwarded;
+    this.confirmationMessageId = confirmationMessageId;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }

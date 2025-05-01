@@ -17,6 +17,33 @@ class SessionService {
   async createSession(phoneNumber, userName) {
     try {
       const db = databaseService.getDb();
+      const collection = Session.getCollection(db);
+
+      // First, try to find an existing active session
+      const existingSession = await collection.findOne({ phoneNumber });
+      
+      if (existingSession) {
+        // Reset the session to initial state but keep the same document
+        const updatedSession = await collection.findOneAndUpdate(
+          { phoneNumber },
+          { 
+            $set: {
+              step: 'initial',
+              selectedService: null,
+              selectedDate: null,
+              selectedTime: null,
+              userName,
+              updatedAt: new Date(),
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            }
+          },
+          { returnDocument: 'after' }
+        );
+        logger.info('Session reset', { phoneNumber });
+        return updatedSession;
+      }
+
+      // If no existing session, create a new one
       const session = new Session({
         phoneNumber,
         userName,
@@ -26,7 +53,7 @@ class SessionService {
         selectedTime: null
       });
 
-      await Session.getCollection(db).insertOne(session);
+      await collection.insertOne(session);
       logger.info('Session created', { phoneNumber });
       return session;
     } catch (error) {

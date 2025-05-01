@@ -347,7 +347,7 @@ export const handleIncomingMessage = async (req, res, next) => {
               // Create booking record
               const booking = new Booking({
                 customerId: customer._id,
-                serviceId: selectedService.id,
+                serviceId: selectedService._id, // Fix: Use _id instead of id
                 status: 'CONFIRMED',
                 appointmentDate: selectedDate,
                 appointmentTime: selectedSlot.title
@@ -355,16 +355,8 @@ export const handleIncomingMessage = async (req, res, next) => {
 
               await Booking.getCollection(db).insertOne(booking);
 
-              // Update customer's last visit and add loyalty points
-              await customerCollection.updateOne(
-                { _id: customer._id },
-                { 
-                  $set: { lastVisit: new Date() },
-                  $inc: { loyaltyPoints: 10 } // Add 10 points for each booking
-                }
-              );
-
-              await whatsappService.sendTextMessage(
+              // Send confirmation message
+              const response = await whatsappService.sendTextMessage(
                 phoneNumberId,
                 from,
                 MESSAGES.BOOKING_CONFIRMED(
@@ -376,6 +368,20 @@ export const handleIncomingMessage = async (req, res, next) => {
                 ),
                 message.id
               );
+
+              // Store the confirmation message ID
+              const confirmationMessageId = response.data?.messages?.[0]?.id;
+              if (confirmationMessageId) {
+                await Booking.getCollection(db).updateOne(
+                  { _id: booking._id },
+                  { 
+                    $set: { 
+                      confirmationMessageId,
+                      updatedAt: new Date()
+                    }
+                  }
+                );
+              }
 
               // Clear session after successful booking
               await sessionService.clearSession(from);
