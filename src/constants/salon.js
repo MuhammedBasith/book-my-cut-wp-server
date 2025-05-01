@@ -33,6 +33,6 @@ export const MESSAGES = {
   CHOOSE_DATE: 'Choose a date for your appointment:',
   CHOOSE_TIME: 'Select a suitable time for your visit.',
   LOYALTY_POINTS: '🎁 Loyalty points tracking is coming soon! Stay tuned. 🚀',
-  BOOKING_CONFIRMED: (name, service, date, time) => 
-    `✅ Awesome ${name}! Your appointment for ${service} is booked on ${date} at ${time}.\nWe'll see you soon! 💇‍♀️`
+  BOOKING_CONFIRMED: (name, service, date, time, reference) => 
+    `✅ Awesome ${name}! Your appointment for ${service} is booked on ${date} at ${time}.\n\nBooking Reference: ${reference}\n\nWe'll see you soon! 💇‍♀️`
 };

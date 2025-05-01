@@ -3,6 +3,9 @@ import { sessionService } from '../services/sessionService.js';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { GREETING_PATTERNS, MESSAGES, SERVICES } from '../constants/salon.js';
+import { Customer } from '../models/Customer.js';
+import { Booking } from '../models/Booking.js';
+import { databaseService } from '../services/databaseService.js';
 
 const TIME_RANGES = {
   morning: { start: 9, end: 12, label: 'Morning (9 AM - 12 PM)' },
@@ -90,6 +93,26 @@ export const handleIncomingMessage = async (req, res, next) => {
 
     const from = message.from;
     const userName = contact?.profile?.name || 'there';
+
+    // Create or update customer record
+    const db = databaseService.getDb();
+    const customerCollection = Customer.getCollection(db);
+    
+    await customerCollection.updateOne(
+      { phoneNumber: from },
+      { 
+        $set: { 
+          name: userName,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          loyaltyPoints: 0,
+          createdAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    
     let session = await sessionService.getSession(from);
 
     // Handle interactive messages (button/list responses)
@@ -205,6 +228,29 @@ export const handleIncomingMessage = async (req, res, next) => {
                 day: 'numeric'
               });
 
+              // Get customer record
+              const customer = await customerCollection.findOne({ phoneNumber: from });
+              
+              // Create booking record
+              const booking = new Booking({
+                customerId: customer._id,
+                serviceId: selectedService.id,
+                status: 'CONFIRMED',
+                appointmentDate: selectedDate,
+                appointmentTime: selectedSlot.title
+              });
+
+              await Booking.getCollection(db).insertOne(booking);
+
+              // Update customer's last visit and add loyalty points
+              await customerCollection.updateOne(
+                { _id: customer._id },
+                { 
+                  $set: { lastVisit: new Date() },
+                  $inc: { loyaltyPoints: 10 } // Add 10 points for each booking
+                }
+              );
+
               await whatsappService.sendTextMessage(
                 phoneNumberId,
                 from,
@@ -212,7 +258,8 @@ export const handleIncomingMessage = async (req, res, next) => {
                   userName,
                   selectedService.title,
                   dateStr,
-                  selectedSlot.title
+                  selectedSlot.title,
+                  booking.bookingReference
                 ),
                 message.id
               );
