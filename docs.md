@@ -41,6 +41,7 @@
 # api docs
 
 for now we're using `salon_id=1` since we're starting with a single salon.
+base url: https://book-my-cut-wp-server.onrender.com
 
 ## bookings
 
